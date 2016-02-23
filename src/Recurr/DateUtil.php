@@ -61,6 +61,22 @@ class DateUtil
         0, 1, 2, 3, 4, 5, 6,
     );
 
+    public static $wDayMaskList = array();
+
+
+        //month mask
+    public static $leapMonthMask = array();
+    public static $normalMonthMask = array();
+
+    //leap day mask
+    public static $leapNegativeMonthDaysMask = array();
+    public static $leapPositiveMonthDaysMask = array();
+
+    //day mask
+    public static $negativeMonthDaysMask = array();
+    public static $positiveMonthDaysMask = array();
+
+
     /**
      * Get an object containing info for a particular date
      *
@@ -86,18 +102,29 @@ class DateUtil
             $i->mRanges = self::$monthEndDoY366;
         }
 
+        $dtyear = $dt->format('Y');
+
         $tmpDt = clone $dt;
-        $tmpDt->setDate($dt->format('Y') + 1, 1, 1);
+        $tmpDt->setDate($dtyear + 1, 1, 1);
         $i->nextYearLength = self::getYearLength($tmpDt);
 
         $tmpDt = clone $dt;
-        $tmpDt->setDate($dt->format('Y'), 1, 1);
+        $tmpDt->setDate($dtyear, 1, 1);
         $i->dayOfWeekYearDay1 = self::getDayOfWeek($tmpDt);
 
-        $i->wDayMask = array_slice(
-            self::$wDayMask,
-            $i->dayOfWeekYearDay1
-        );
+
+        //检查和获取已保存的静态值
+        if (!isset(self::$wDayMaskList[$i->dayOfWeekYearDay1]) || empty(self::$wDayMaskList[$i->dayOfWeekYearDay1]))
+        {
+            self::$wDayMaskList[$i->dayOfWeekYearDay1]
+                =
+                array_slice(
+                    self::$wDayMask,
+                    $i->dayOfWeekYearDay1
+                );
+        }
+
+        $i->wDayMask = self::$wDayMaskList[$i->dayOfWeekYearDay1];
 
         return $i;
     }
@@ -228,7 +255,10 @@ class DateUtil
         $start = $dayOfYear;
         $end   = $dayOfYear;
 
-        $set = range($start, $end);
+        //因为$start == $end 所以去掉range函数
+        //$set = range($start, $end);
+        $set = array($start);
+
         $obj = new DaySet($set, $start, $end + 1);
 
         return $obj;
@@ -352,16 +382,70 @@ class DateUtil
     public static function getMonthDaysMask(\DateTime $dt, $negative = false)
     {
         if ($negative) {
-            $m29 = range(-29, -1);
-            $m30 = range(-30, -1);
-            $m31 = range(-31, -1);
+            if(empty(self::$leapNegativeMonthDaysMask))
+            {
+                $m29 = range(-29, -1);
+                $m30 = range(-30, -1);
+                $m31 = range(-31, -1);
+
+                self::$leapNegativeMonthDaysMask =
+                    array_merge(
+                    $m31, // Jan (31)
+                    $m29, // Feb (28)
+                    $m31, // Mar (31)
+                    $m30, // Apr (30)
+                    $m31, // May (31)
+                    $m30, // Jun (30)
+                    $m31, // Jul (31)
+                    $m31, // Aug (31)
+                    $m30, // Sep (30)
+                    $m31, // Oct (31)
+                    $m30, // Nov (30)
+                    $m31, // Dec (31)
+                    array_slice(
+                        $m31,
+                        0,
+                        7
+                    )
+                );
+
+            }
+            $mask = self::$leapNegativeMonthDaysMask;
+
         } else {
-            $m29 = range(1, 29);
-            $m30 = range(1, 30);
-            $m31 = range(1, 31);
+            if(empty(self::$leapPositiveMonthDaysMask))
+            {
+                $m29 = range(1, 29);
+                $m30 = range(1, 30);
+                $m31 = range(1, 31);
+
+                self::$leapPositiveMonthDaysMask = array_merge(
+                    $m31, // Jan (31)
+                    $m29, // Feb (28)
+                    $m31, // Mar (31)
+                    $m30, // Apr (30)
+                    $m31, // May (31)
+                    $m30, // Jun (30)
+                    $m31, // Jul (31)
+                    $m31, // Aug (31)
+                    $m30, // Sep (30)
+                    $m31, // Oct (31)
+                    $m30, // Nov (30)
+                    $m31, // Dec (31)
+                    array_slice(
+                        $m31,
+                        0,
+                        7
+                    )
+                );
+            }
+
+            $mask = self::$leapPositiveMonthDaysMask;
         }
 
-        $mask = array_merge(
+
+
+        /*$mask = array_merge(
             $m31, // Jan (31)
             $m29, // Feb (28)
             $m31, // Mar (31)
@@ -379,15 +463,25 @@ class DateUtil
                 0,
                 7
             )
-        );
+        );*/
 
         if (self::isLeapYearDate($dt)) {
             return $mask;
         } else {
             if ($negative) {
-                $mask = array_merge(array_slice($mask, 0, 31), array_slice($mask, 32));
+                if(empty(self::$negativeMonthDaysMask))
+                {
+                    self::$negativeMonthDaysMask = array_merge(array_slice($mask, 0, 31), array_slice($mask, 32));
+                }
+
+                $mask = self::$negativeMonthDaysMask;
             } else {
-                $mask = array_merge(array_slice($mask, 0, 59), array_slice($mask, 60));
+                if(empty(self::$positiveMonthDaysMask))
+                {
+                    self::$positiveMonthDaysMask = array_merge(array_slice($mask, 0, 59), array_slice($mask, 60));
+                }
+
+                $mask = self::$positiveMonthDaysMask;
             }
 
             return $mask;
@@ -397,37 +491,45 @@ class DateUtil
     public static function getMonthMask(\DateTime $dt)
     {
         if (self::isLeapYearDate($dt)) {
-            return array_merge(
-                array_fill(0, 31, 1), // Jan (31)
-                array_fill(0, 29, 2), // Feb (29)
-                array_fill(0, 31, 3), // Mar (31)
-                array_fill(0, 30, 4), // Apr (30)
-                array_fill(0, 31, 5), // May (31)
-                array_fill(0, 30, 6), // Jun (30)
-                array_fill(0, 31, 7), // Jul (31)
-                array_fill(0, 31, 8), // Aug (31)
-                array_fill(0, 30, 9), // Sep (30)
-                array_fill(0, 31, 10), // Oct (31)
-                array_fill(0, 30, 11), // Nov (30)
-                array_fill(0, 31, 12), // Dec (31)
-                array_fill(0, 7, 1)
-            );
+            if(empty(self::$leapMonthMask))
+            {
+                self::$leapMonthMask = array_merge(
+                    array_fill(0, 31, 1), // Jan (31)
+                    array_fill(0, 29, 2), // Feb (29)
+                    array_fill(0, 31, 3), // Mar (31)
+                    array_fill(0, 30, 4), // Apr (30)
+                    array_fill(0, 31, 5), // May (31)
+                    array_fill(0, 30, 6), // Jun (30)
+                    array_fill(0, 31, 7), // Jul (31)
+                    array_fill(0, 31, 8), // Aug (31)
+                    array_fill(0, 30, 9), // Sep (30)
+                    array_fill(0, 31, 10), // Oct (31)
+                    array_fill(0, 30, 11), // Nov (30)
+                    array_fill(0, 31, 12), // Dec (31)
+                    array_fill(0, 7, 1)
+                );
+            }
+            return self::$leapMonthMask;
         } else {
-            return array_merge(
-                array_fill(0, 31, 1), // Jan (31)
-                array_fill(0, 28, 2), // Feb (28)
-                array_fill(0, 31, 3), // Mar (31)
-                array_fill(0, 30, 4), // Apr (30)
-                array_fill(0, 31, 5), // May (31)
-                array_fill(0, 30, 6), // Jun (30)
-                array_fill(0, 31, 7), // Jul (31)
-                array_fill(0, 31, 8), // Aug (31)
-                array_fill(0, 30, 9), // Sep (30)
-                array_fill(0, 31, 10), // Oct (31)
-                array_fill(0, 30, 11), // Nov (30)
-                array_fill(0, 31, 12), // Dec (31)
-                array_fill(0, 7, 1)
-            );
+            if(empty(self::$normalMonthMask))
+            {
+                self::$normalMonthMask = array_merge(
+                    array_fill(0, 31, 1), // Jan (31)
+                    array_fill(0, 28, 2), // Feb (28)
+                    array_fill(0, 31, 3), // Mar (31)
+                    array_fill(0, 30, 4), // Apr (30)
+                    array_fill(0, 31, 5), // May (31)
+                    array_fill(0, 30, 6), // Jun (30)
+                    array_fill(0, 31, 7), // Jul (31)
+                    array_fill(0, 31, 8), // Aug (31)
+                    array_fill(0, 30, 9), // Sep (30)
+                    array_fill(0, 31, 10), // Oct (31)
+                    array_fill(0, 30, 11), // Nov (30)
+                    array_fill(0, 31, 12), // Dec (31)
+                    array_fill(0, 7, 1)
+                );
+            }
+            return self::$normalMonthMask;
         }
     }
 
